@@ -7,10 +7,6 @@ Chronicle-Network
 A High Performance Network library
 
 # Purpose
-The Netty library is a benchmark for high performance libraries. 
-    Netty is designed for scalability in particular, horizontal scalability is
-    based on the Selector and it has highly tuned this facility.
-   
 This library is designed to be lower latency and support higher throughputs 
     by employing techniques used in low latency trading systems.
     
@@ -20,7 +16,6 @@ Network current support TCP only.
 Planned support for
 * Shared Memory
 * Unreliable UDP
-
 
 # Example
 ## TCP Client/Server : Echo Example
@@ -84,7 +79,6 @@ receive and update a message and then immediately send back a response, however 
 other solutions that can be implemented using Chronicle-Network, such as the server
 responding later to a client subscription.
 
-
 ```java
 /**
  * This code is used to read the tid and payload from a wire message,
@@ -95,7 +89,6 @@ public class WireEchoRequestHandler extends WireTcpHandler {
     public WireEchoRequestHandler(@NotNull Function<Bytes, Wire> bytesToWire) {
         super(bytesToWire);
     }
-
 
     /**
      * simply reads the csp,tid and payload and sends back the tid and payload
@@ -175,7 +168,6 @@ reply.readDocument(null, data -> {
 });
 ```
 
-
 #### Shutdown and Cleanup
 ```java
 eg.stop();
@@ -214,5 +206,4 @@ This comes at the cost of scalability for large number os connections.
 Netty has a much wider range of functionality, however it creates some
    garbage in it's operation (less than using plain NIO Selectors) and isn't
    designed to support busy waiting which gives up a small but significant delay.
-
 

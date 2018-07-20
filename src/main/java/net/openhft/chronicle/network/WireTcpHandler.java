@@ -229,16 +229,9 @@ public abstract class WireTcpHandler<T extends NetworkContext>
     private void resizeInWire(long size) {
         @NotNull final Bytes<?> bytes = inWire.bytes();
         if (size > bytes.realCapacity()) {
-            Jvm.debug().on(getClass(), Integer.toHexString(System.identityHashCode(bytes)) + " resized to: " + size);
+            if (Jvm.isDebugEnabled(getClass()))
+                Jvm.debug().on(getClass(), Integer.toHexString(System.identityHashCode(bytes)) + " resized to: " + size);
             bytes.ensureCapacity(size);
-        }
-    }
-
-    private void logYaml(long start) {
-        if (YamlLogging.showServerReads() && !inWire.bytes().isEmpty()) {
-            String s = Wires.fromSizePrefixedBlobs(inWire.bytes(), start, inWire.bytes()
-                    .readLimit());
-            LOG.info("handler=" + this.getClass().getSimpleName() + ", read:\n" + s);
         }
     }
 

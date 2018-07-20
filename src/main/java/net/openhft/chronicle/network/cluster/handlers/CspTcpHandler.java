@@ -9,14 +9,14 @@ import net.openhft.chronicle.network.api.session.SubHandler;
 import net.openhft.chronicle.network.cluster.HeartbeatEventHandler;
 import net.openhft.chronicle.network.cluster.WritableSubHandler;
 import net.openhft.chronicle.network.connection.CoreFields;
-import net.openhft.chronicle.wire.ValueIn;
-import net.openhft.chronicle.wire.WireIn;
-import net.openhft.chronicle.wire.Wires;
-import net.openhft.chronicle.wire.WriteMarshallable;
+import net.openhft.chronicle.wire.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static net.openhft.chronicle.network.connection.CoreFields.csp;
 
@@ -25,12 +25,14 @@ public abstract class CspTcpHandler<T extends NetworkContext> extends WireTcpHan
     protected final List<WriteMarshallable> writers = new ArrayList<>();
     @NotNull
     private final Map<Long, SubHandler> cidToHandle = new HashMap<>();
+    private final Map<Object, SubHandler> registry = new HashMap<>();
+    protected Marshallable config;
     @Nullable
     private SubHandler handler;
     @Nullable
     private HeartbeatEventHandler heartbeatEventHandler;
     private long lastCid;
-    private final Map<Object, SubHandler> registry = new HashMap<>();
+
     @Nullable
     protected SubHandler handler() {
         return handler;
@@ -85,6 +87,10 @@ public abstract class CspTcpHandler<T extends NetworkContext> extends WireTcpHan
                         registry.put(registerable.registryKey(), this.handler);
                         registerable.registry(registry);
                     }
+
+                    if (config != null && handler instanceof Configurable)
+                        ((Configurable) handler).configurable(config);
+
                 } catch (Exception e) {
                     Jvm.warn().on(getClass(), e);
                 }
@@ -124,6 +130,10 @@ public abstract class CspTcpHandler<T extends NetworkContext> extends WireTcpHan
         }
 
         return false;
+    }
+
+    public void config(Marshallable config) {
+        this.config = config;
     }
 
     @Nullable

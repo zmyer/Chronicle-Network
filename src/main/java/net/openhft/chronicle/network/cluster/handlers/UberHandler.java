@@ -21,7 +21,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static net.openhft.chronicle.network.HeaderTcpHandler.HANDLER;
 import static net.openhft.chronicle.network.cluster.TerminatorHandler.terminationHandler;
 
-public final class UberHandler <T extends ClusteredNetworkContext> extends CspTcpHandler<T>
+public final class UberHandler<T extends ClusteredNetworkContext> extends CspTcpHandler<T>
         implements Demarshallable, WriteMarshallable {
 
     private final int remoteIdentifier;
@@ -49,6 +49,7 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
 
         this.localIdentifier = localIdentifier;
         this.remoteIdentifier = remoteIdentifier;
+        this.config = config;
 
         assert remoteIdentifier != localIdentifier :
                 "remoteIdentifier=" + remoteIdentifier + ", " +
@@ -63,6 +64,14 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
                 wire.write(() -> HANDLER).typedMarshallable(m);
             }
         };
+    }
+
+    private static String peekContents(final @NotNull DocumentContext dc) {
+        try {
+            return dc.wire().readingPeekYaml();
+        } catch (RuntimeException e) {
+            return "Failed to peek at contents due to: " + e.getMessage();
+        }
     }
 
     public int remoteIdentifier() {
@@ -109,11 +118,16 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
 
             final Cluster engineCluster = nc.getCluster(clusterName);
 
+            ClusterContext clusterContext = engineCluster.clusterContext();
+            if (clusterContext != null)
+                config = clusterContext.config();
+
             // note : we have to publish the uber handler, even if we send a termination event
             // this is so the termination event can be processed by the receiver
-            if (nc().isAcceptor())
+            if (nc().isAcceptor()) {
                 // reflect the uber handler
                 publish(uberHandler());
+            }
 
             nc.terminationEventHandler(engineCluster.findTerminationEventHandler(remoteIdentifier));
 
@@ -131,7 +145,6 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
     }
 
     private boolean checkIdentifierEqualsHostId() {
-
         return localIdentifier == nc().getLocalHostIdentifier() || 0 == nc().getLocalHostIdentifier();
     }
 
@@ -153,6 +166,7 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
                 remoteIdentifier,
                 wireType(),
                 clusterName);
+
         return uberHandler(handler);
     }
 
@@ -208,7 +222,7 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
 
             SubHandler handler = handler();
             if (handler == null)
-               throw new IllegalStateException("handler == null, check that the " +
+                throw new IllegalStateException("handler == null, check that the " +
                         "Csp/Cid has been sent, failed to " +
                         "fully " +
                         "process the following " +
@@ -237,11 +251,20 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
         if (handler != null)
             handler.onWrite(outWire);
 
-        for (WriteMarshallable w : writers) {
-            if (isClosing.get() || w == null)
-                return;
+        WriteMarshallable w;
+        for (int i = 0; i < writers.size(); i++) {
+            try {
+                w = writers.get(i);
+                if (null == w)
+                    continue;
 
-            w.writeMarshallable(outWire);
+                if (isClosing.get())
+                    return;
+
+                w.writeMarshallable(outWire);
+            } catch (Exception e) {
+                Jvm.fatal().on(getClass(), e);
+            }
         }
     }
 
@@ -264,22 +287,16 @@ public final class UberHandler <T extends ClusteredNetworkContext> extends CspTc
         }
 
         @NotNull
-        @Override
         public WriteMarshallable apply(@NotNull final ClusterContext clusterContext,
                                        @NotNull final HostDetails hostdetails) {
             final byte localIdentifier = clusterContext.localIdentifier();
             final int remoteIdentifier = hostdetails.hostId();
             final WireType wireType = clusterContext.wireType();
             final String name = clusterContext.clusterName();
-            return uberHandler(new UberHandler(localIdentifier, remoteIdentifier, wireType, name));
-        }
-    }
-
-    private static String peekContents(final @NotNull DocumentContext dc) {
-        try {
-            return dc.wire().readingPeekYaml();
-        } catch (RuntimeException e) {
-            return "Failed to peek at contents due to: " + e.getMessage();
+            return uberHandler(new UberHandler(localIdentifier,
+                    remoteIdentifier,
+                    wireType,
+                    name));
         }
     }
 }

@@ -17,10 +17,56 @@ import java.nio.channels.SocketChannel;
 
 import static net.openhft.chronicle.core.io.Closeable.closeQuietly;
 
-
 @FunctionalInterface
 public interface ConnectionStrategy extends Marshallable {
 
+    @Nullable
+    static SocketChannel socketChannel(@NotNull InetSocketAddress socketAddress, int tcpBufferSize, int socketConnectionTimeoutMs) throws IOException {
+
+        final SocketChannel result = SocketChannel.open();
+        @Nullable Selector selector = null;
+        boolean failed = true;
+        try {
+            result.configureBlocking(false);
+            Socket socket = result.socket();
+            if (!TcpEventHandler.DISABLE_TCP_NODELAY) socket.setTcpNoDelay(true);
+            socket.setReceiveBufferSize(tcpBufferSize);
+            socket.setSendBufferSize(tcpBufferSize);
+            socket.setSoTimeout(0);
+            socket.setSoLinger(false, 0);
+            result.connect(socketAddress);
+
+            selector = Selector.open();
+            result.register(selector, SelectionKey.OP_CONNECT);
+
+            int select = selector.select(socketConnectionTimeoutMs);
+            if (select == 0) {
+                if (Jvm.isDebugEnabled(ConnectionStrategy.class))
+                    Jvm.debug().on(ConnectionStrategy.class, "Timed out attempting to connect to " + socketAddress);
+                return null;
+            } else {
+                try {
+                    if (!result.finishConnect())
+                        return null;
+
+                } catch (IOException e) {
+                    if (Jvm.isDebugEnabled(ConnectionStrategy.class))
+                        Jvm.debug().on(ConnectionStrategy.class, "Failed to connect to " + socketAddress + " " + e);
+                    return null;
+                }
+            }
+
+            failed = false;
+            return result;
+
+        } catch (Exception e) {
+            return null;
+        } finally {
+            closeQuietly(selector);
+            if (failed)
+                closeQuietly(result);
+        }
+    }
 
     /**
      * @param name                  the name of the connection, only used for logging
@@ -37,7 +83,6 @@ public interface ConnectionStrategy extends Marshallable {
                           boolean didLogIn,
                           @NotNull FatalFailureMonitor fatalFailureMonitor) throws InterruptedException;
 
-
     @Nullable
     default SocketChannel openSocketChannel(@NotNull InetSocketAddress socketAddress,
                                             int tcpBufferSize,
@@ -48,7 +93,6 @@ public interface ConnectionStrategy extends Marshallable {
                 timeoutMs,
                 1);
     }
-
 
     /**
      * the reason for this method is that unlike the selector it uses tick time
@@ -78,55 +122,9 @@ public interface ConnectionStrategy extends Marshallable {
         }
     }
 
-    @Nullable
-    static SocketChannel socketChannel(@NotNull InetSocketAddress socketAddress, int tcpBufferSize, int socketConnectionTimeoutMs) throws IOException {
-
-        final SocketChannel result = SocketChannel.open();
-        @Nullable Selector selector = null;
-        boolean failed = true;
-        try {
-            result.configureBlocking(false);
-            Socket socket = result.socket();
-            socket.setTcpNoDelay(true);
-            socket.setReceiveBufferSize(tcpBufferSize);
-            socket.setSendBufferSize(tcpBufferSize);
-            socket.setSoTimeout(0);
-            socket.setSoLinger(false, 0);
-            result.connect(socketAddress);
-
-            selector = Selector.open();
-            result.register(selector, SelectionKey.OP_CONNECT);
-
-            int select = selector.select(socketConnectionTimeoutMs);
-            if (select == 0) {
-                Jvm.debug().on(ConnectionStrategy.class, "Timed out attempting to connect to " + socketAddress);
-                return null;
-            } else {
-                try {
-                    if (!result.finishConnect())
-                        return null;
-
-                } catch (IOException e) {
-                    Jvm.debug().on(ConnectionStrategy.class, "Failed to connect to " + socketAddress + " " + e);
-                    return null;
-                }
-            }
-
-            failed = false;
-            return result;
-
-        } catch (Exception e) {
-            return null;
-        } finally {
-            closeQuietly(selector);
-            if (failed)
-                closeQuietly(result);
-        }
-    }
-
-
     /**
      * allows control of a backoff strategy
+     *
      * @return how long in milliseconds to pause before attempting a reconnect
      */
     default long pauseMillisBeforeReconnect() {

@@ -114,8 +114,17 @@ public enum TCPRegistry {
             return ssc;
         InetSocketAddress address = lookup(description);
         ssc = ServerSocketChannel.open();
-        ssc.socket().setReuseAddress(false);
-        ssc.bind(address);
+
+        // PLEASE DON'T CHANGE THIS TO FALSE AS IT CAUSES RESTART ISSUES ON TCP/IP TIMED_WAIT
+        ssc.socket().setReuseAddress(true);
+
+        try {
+            ssc.bind(address);
+        } catch (Exception e){
+            Jvm.warn().on(TCPRegistry.class, "Error when attempting to bind to address " + address, e);
+            Jvm.rethrow(e);
+        }
+
         DESC_TO_SERVER_SOCKET_CHANNEL_MAP.put(description, ssc);
         return ssc;
     }

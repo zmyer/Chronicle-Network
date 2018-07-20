@@ -27,7 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
+import java.net.ServerSocket;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.function.Function;
@@ -47,6 +47,7 @@ public class AcceptorEventHandler implements EventHandler, Closeable {
     private final ServerSocketChannel ssc;
     @NotNull
     private final Supplier<? extends NetworkContext> ncFactory;
+    private final String hostPort;
 
     private EventLoop eventLoop;
 
@@ -56,7 +57,8 @@ public class AcceptorEventHandler implements EventHandler, Closeable {
                                 @NotNull final Function<NetworkContext, TcpEventHandler> handlerFactory,
                                 @NotNull final Supplier<? extends NetworkContext> ncFactory) throws IOException {
         this.handlerFactory = handlerFactory;
-        this.ssc = TCPRegistry.acquireServerSocketChannel(hostPort);
+        this.hostPort = hostPort;
+        this.ssc = TCPRegistry.acquireServerSocketChannel(this.hostPort);
         this.ncFactory = ncFactory;
     }
 
@@ -71,8 +73,8 @@ public class AcceptorEventHandler implements EventHandler, Closeable {
             throw new InvalidEventHandlerException();
 
         try {
-            if (LOG.isDebugEnabled())
-                LOG.debug(Thread.currentThread() + " accepting " + ssc);
+            if (Jvm.isDebugEnabled(getClass()))
+                Jvm.debug().on(getClass(), Thread.currentThread() + " accepting " + ssc);
 
             SocketChannel sc = ssc.accept();
 
@@ -87,14 +89,15 @@ public class AcceptorEventHandler implements EventHandler, Closeable {
                 eventLoop.addHandler(apply);
             }
 
-        } catch (ClosedChannelException e) {
-            closeSocket();
-            throw new InvalidEventHandlerException(e);
         } catch (Exception e) {
             if (!closed) {
-                Jvm.fatal().on(getClass(), e);
-                closeSocket();
+                ServerSocket socket = ssc.socket();
+                if (socket != null)
+                    Jvm.warn().on(getClass(), hostPort+", port=" + socket.getLocalPort(), e);
+                else
+                    Jvm.warn().on(getClass(), hostPort, e);
             }
+            closeSocket();
             throw new InvalidEventHandlerException(e);
         }
         return false;
@@ -125,6 +128,5 @@ public class AcceptorEventHandler implements EventHandler, Closeable {
         closed = true;
         closeSocket();
     }
-
 
 }

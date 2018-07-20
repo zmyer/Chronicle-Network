@@ -18,6 +18,7 @@ package net.openhft.chronicle.network;
 
 import net.openhft.chronicle.core.Jvm;
 import net.openhft.chronicle.core.io.Closeable;
+import net.openhft.chronicle.core.io.IORuntimeException;
 import net.openhft.chronicle.core.threads.EventHandler;
 import net.openhft.chronicle.core.threads.EventLoop;
 import net.openhft.chronicle.core.threads.HandlerPriority;
@@ -92,7 +93,7 @@ public class RemoteConnector implements Closeable {
         final SocketChannel result = SocketChannel.open(socketAddress);
         result.configureBlocking(false);
         Socket socket = result.socket();
-        socket.setTcpNoDelay(true);
+        if (!TcpEventHandler.DISABLE_TCP_NODELAY) socket.setTcpNoDelay(true);
         socket.setReceiveBufferSize(tcpBufferSize);
         socket.setSendBufferSize(tcpBufferSize);
         socket.setSoTimeout(0);
@@ -102,12 +103,6 @@ public class RemoteConnector implements Closeable {
 
     private class RCEventHandler implements EventHandler, Closeable {
 
-        @NotNull
-        @Override
-        public HandlerPriority priority() {
-            return HandlerPriority.BLOCKING;
-        }
-
         private final InetSocketAddress address;
         private final AtomicLong nextPeriod = new AtomicLong();
         private final String remoteHostPort;
@@ -115,7 +110,6 @@ public class RemoteConnector implements Closeable {
         private final EventLoop eventLoop;
         private final long retryInterval;
         private volatile boolean closed;
-
         RCEventHandler(String remoteHostPort,
                        NetworkContext nc,
                        EventLoop eventLoop,
@@ -127,6 +121,11 @@ public class RemoteConnector implements Closeable {
             this.retryInterval = retryInterval;
         }
 
+        @NotNull
+        @Override
+        public HandlerPriority priority() {
+            return HandlerPriority.BLOCKING;
+        }
 
         @Override
         public boolean action() throws InvalidEventHandlerException {
@@ -136,8 +135,7 @@ public class RemoteConnector implements Closeable {
 
             if (time > nextPeriod.get()) {
                 nextPeriod.set(time + retryInterval);
-            }
-            else {
+            } else {
                 // this is called in a loop from BlockingEventHandler,
                 // so just wait until the end of the retryInterval
                 if (priority() == HandlerPriority.BLOCKING) {
@@ -168,7 +166,7 @@ public class RemoteConnector implements Closeable {
             } catch (AlreadyConnectedException e) {
                 Jvm.debug().on(getClass(), e);
                 throw new InvalidEventHandlerException();
-            } catch (IOException e) {
+            } catch (IOException | IORuntimeException e) {
                 nextPeriod.set(System.currentTimeMillis() + retryInterval);
                 return false;
             }

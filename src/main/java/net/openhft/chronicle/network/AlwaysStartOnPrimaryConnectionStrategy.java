@@ -1,7 +1,6 @@
 package net.openhft.chronicle.network;
 
 import net.openhft.chronicle.core.Jvm;
-import net.openhft.chronicle.core.io.IORuntimeException;
 import net.openhft.chronicle.network.connection.FatalFailureMonitor;
 import net.openhft.chronicle.network.connection.SocketAddressSupplier;
 import net.openhft.chronicle.wire.AbstractMarshallable;
@@ -24,7 +23,7 @@ import static net.openhft.chronicle.network.connection.TcpChannelHub.TCP_BUFFER;
  * If all the host:ports have been attempted since the last connection was established, no successful connection can be found,
  * then null is returned, and the fatalFailureMonitor.onFatalFailure() is triggered
  */
-public class AlwaysStartOnPrimaryConnectionStrategy  extends AbstractMarshallable implements ConnectionStrategy {
+public class AlwaysStartOnPrimaryConnectionStrategy extends AbstractMarshallable implements ConnectionStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(AlwaysStartOnPrimaryConnectionStrategy.class);
 
@@ -39,7 +38,6 @@ public class AlwaysStartOnPrimaryConnectionStrategy  extends AbstractMarshallabl
                                  @Nullable NetworkStatsListener<? extends NetworkContext> networkStatsListener,
                                  boolean didLogIn,
                                  @Nullable FatalFailureMonitor fatalFailureMonitor) throws InterruptedException {
-
 
         if (socketAddressSupplier.get() == null || didLogIn)
             socketAddressSupplier.resetToPrimary();
@@ -63,10 +61,11 @@ public class AlwaysStartOnPrimaryConnectionStrategy  extends AbstractMarshallabl
                     continue;
                 }
 
-                socketChannel = openSocketChannel(socketAddress, tcpBufferSize, 500, socketConnectionTimeoutMs);
+                socketChannel = openSocketChannel(socketAddress, tcpBufferSize, pausePeriodMs, socketConnectionTimeoutMs);
 
                 if (socketChannel == null) {
-                    Jvm.debug().on(getClass(), "unable to connected to " + socketAddressSupplier.toString());
+                    if (Jvm.isDebugEnabled(getClass()))
+                        Jvm.debug().on(getClass(), "unable to connected to " + socketAddressSupplier.toString());
 
                     // at end
                     if (isAtEnd(socketAddressSupplier)) {
@@ -78,7 +77,8 @@ public class AlwaysStartOnPrimaryConnectionStrategy  extends AbstractMarshallabl
                     continue;
                 }
 
-                Jvm.debug().on(getClass(), "successfully connected to " + socketAddressSupplier.toString());
+                if (Jvm.isDebugEnabled(getClass()))
+                    Jvm.debug().on(getClass(), "successfully connected to " + socketAddressSupplier);
 
                 if (networkStatsListener != null)
                     networkStatsListener.onHostPort(socketAddress.getHostString(), socketAddress.getPort());

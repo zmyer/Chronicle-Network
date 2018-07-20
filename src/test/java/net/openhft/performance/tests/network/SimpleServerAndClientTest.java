@@ -37,8 +37,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.channels.ServerSocketChannel;
@@ -64,8 +62,8 @@ public class SimpleServerAndClientTest {
     }
 
     @Test
-    public void test() throws IOException, TimeoutException, InterruptedException {
-        YamlLogging.setAll(true);
+    public void test() throws IOException {
+        YamlLogging.setAll(false);
 
         for (; ; ) {
             // this the name of a reference to the host name and port,
